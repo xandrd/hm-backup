@@ -707,7 +707,7 @@ class HM_Backup {
 
 		$this->do_action( 'hmbkp_mysqldump_started' );
 
-		$this->db = @mysql_pconnect( DB_HOST, DB_USER, DB_PASSWORD );
+		/*$this->db = @mysql_pconnect( DB_HOST, DB_USER, DB_PASSWORD );
 
 		if ( ! $this->db )
 			$this->db = mysql_connect( DB_HOST, DB_USER, DB_PASSWORD );
@@ -715,13 +715,17 @@ class HM_Backup {
 		if ( ! $this->db )
 			return;
 
-		mysql_select_db( DB_NAME, $this->db );
+		mysql_select_db( DB_NAME, $this->db );*/
+		$this->db = mysqli_connect(DB_HOST, DB_USER, DB_PASSWORD, DB_NAME);
+		
+		if ( ! $this->db )
+			return;
 
-		if ( function_exists( 'mysql_set_charset' ) )
-			mysql_set_charset( DB_CHARSET, $this->db );
+		if ( function_exists( 'mysqli_set_charset' ) )
+			mysqli_set_charset($this->db , DB_CHARSET);
 
 		// Begin new backup of MySql
-		$tables = mysql_query( 'SHOW TABLES' );
+		$tables = mysqli_query($this->db , 'SHOW TABLES' );
 
 		$sql_file = "# WordPress : " . get_bloginfo( 'url' ) . " MySQL database backup\n";
 		$sql_file .= "#\n";
@@ -730,9 +734,12 @@ class HM_Backup {
 		$sql_file .= "# Database: " . $this->sql_backquote( DB_NAME ) . "\n";
 		$sql_file .= "# --------------------------------------------------------\n";
 
-		for ( $i = 0; $i < mysql_num_rows( $tables ); $i ++ ) {
-
-			$curr_table = mysql_tablename( $tables, $i );
+		for ( $i = 0; $i < $tables->num_rows; $i ++ ) {
+		
+			//$curr_table = mysql_tablename( $tables, $i );
+			mysqli_data_seek( $tables, $i );
+			$f = mysqli_fetch_array( $tables );
+			$curr_table = $f[0];
 
 			// Create the SQL statements
 			$sql_file .= "# --------------------------------------------------------\n";
@@ -1347,16 +1354,17 @@ class HM_Backup {
 
 		// Get table structure
 		$query  = 'SHOW CREATE TABLE ' . $this->sql_backquote( $table );
-		$result = mysql_query( $query, $this->db );
+		//$result = mysql_query( $query, $this->db );
+		$result = mysqli_query( $this->db, $query);
 
 		if ( $result ) {
 
-			if ( mysql_num_rows( $result ) > 0 ) {
-				$sql_create_arr = mysql_fetch_array( $result );
+			if ( mysqli_num_rows( $result ) > 0 ) {
+				$sql_create_arr = mysqli_fetch_array( $result );
 				$sql_file .= $sql_create_arr[1];
 			}
 
-			mysql_free_result( $result );
+			mysqli_free_result( $result );
 			$sql_file .= ' ;';
 
 		}
@@ -1365,14 +1373,14 @@ class HM_Backup {
 
 		// Get table contents
 		$query  = 'SELECT * FROM ' . $this->sql_backquote( $table );
-		$result = mysql_query( $query, $this->db );
+		$result = mysqli_query(  $this->db, $query);
 
 		$fields_cnt = 0;
 		$rows_cnt = 0;
 
 		if ( $result ) {
-			$fields_cnt = mysql_num_fields( $result );
-			$rows_cnt   = mysql_num_rows( $result );
+			$fields_cnt = mysqli_num_fields( $result );
+			$rows_cnt   = mysqli_num_rows( $result );
 		}
 
 		// Comment in SQL-file
@@ -1385,10 +1393,14 @@ class HM_Backup {
 		// Checks whether the field is an integer or not
 		for ( $j = 0; $j < $fields_cnt; $j ++ ) {
 
-			$field_set[$j] = $this->sql_backquote( mysql_field_name( $result, $j ) );
-			$type          = mysql_field_type( $result, $j );
+			$fieldInfo = mysqli_fetch_field_direct( $result, $j);			
+			$field_set[$j] = $this->sql_backquote( $fieldInfo->name );
+			
+			//$type          = mysql_field_type( $result, $j );
+			$type=$fieldInfo->type;
 
-			if ( $type === 'tinyint' || $type === 'smallint' || $type === 'mediumint' || $type === 'int' || $type === 'bigint' )
+			//if ( $type === 'tinyint' || $type === 'smallint' || $type === 'mediumint' || $type === 'int' || $type === 'bigint' )
+			if ( $type === 1 || $type === 2 || $type === 9 || $type === 3 || $type === 8 )
 				$field_num[$j] = true;
 
 			else
@@ -1403,7 +1415,7 @@ class HM_Backup {
 		$current_row = 0;
 		$batch_write = 0;
 
-		while ( $row = mysql_fetch_row( $result ) ) {
+		while ( $row = mysqli_fetch_row( $result ) ) {
 
 			$current_row ++;
 
@@ -1446,7 +1458,7 @@ class HM_Backup {
 
 		}
 
-		mysql_free_result( $result );
+		mysqli_free_result( $result );
 
 		// Create footer/closing comment in SQL-file
 		$sql_file .= "\n";
